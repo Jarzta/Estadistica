@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Arrays;
+import static fastscript.Estimable.*;
+import java.util.function.Supplier;
 
 /**
  *
@@ -12,6 +14,7 @@ import java.util.Arrays;
 public class TDF {
 
     private Double[] data;
+    private Integer n;
     private Double[] uniqueSet;
 
     private Double[][] clases;
@@ -20,40 +23,68 @@ public class TDF {
     private Integer[] frecuenciaAbsAcumulada;
     private Double[] frecuenciaRelSimple;
     private Double[] frecuenciaRelAcumulada;
-    private boolean roundable;
-    private int precision;
+    private int presición;
 
-    public TDF(String str, String separator, int precision) {
-        this(false, str, separator, precision);
+//    public TDF(String str, String separator, int precision) {
+//        this(false, str, separator, precision);
+//    }
+    public TDF(String str, String separator, int presición) {
+        this.data = toData(str, separator);
+        init(presición, data.length, data, () -> {
+            return calculateClassesIntelvals();
+        }, () -> {
+            return countForIntervals();
+        });
     }
 
-    public TDF(boolean roundable, String str, String separator, int precision) {
-        this.precision = precision;
-        this.roundable = roundable;
-        this.data = toData(str, separator);
-        this.clases = calculateClassesIntelvals();
+    public TDF(Double[] ci, Integer[] fi, int precision) {
+        this(ci, fi, precision, false);
+    }
+
+    public TDF(Double[] ci, Integer[] fi, int presición, boolean unique) {
+        init(presición, sum(fi), new Double[0], () -> {
+            return resolveClasses(ci, unique);
+        }, () -> {
+            return fi;
+        });
+    }
+
+    private void init(int presición, int n, Double[] data, Supplier<Double[][]> ci, Supplier<Integer[]> fi) {
+        this.presición = presición;
+        this.data = data;
+        this.n = n;
+        this.clases = ci.get();
         this.marcasClase = calculateMarks();
         this.uniqueSet = calculateUniqueSet();
-        this.frecuenciaAbsSimple = countForIntervals();
+        this.frecuenciaAbsSimple = fi.get();
         this.frecuenciaAbsAcumulada = calculateFi();
         this.frecuenciaRelSimple = calculatefri();
         this.frecuenciaRelAcumulada = calculateFri();
         this.names = "Ci, Mi, fi, fri, Fi, Fri".replaceAll(" ", "").split(",");
-//        this.columns = new Object[][]{clases, marcasClase, frecuenciaAbsSimple, frecuenciaRelSimple, frecuenciaAbsAcumulada, frecuenciaRelAcumulada};
         this.columns = new Object[][]{toStringMark().split("\n"), marcasClase, frecuenciaAbsSimple, frecuenciaRelSimple, frecuenciaAbsAcumulada, frecuenciaRelAcumulada};
+        calculateEstimable();
     }
 
-    public final Double[] toData(String str, String separator) {
+    public static final Double[] toData(String str, String separator) {
         String[] data = str.split(separator);
         Double[] datadouble = new Double[data.length];
         for (int i = 0; i < data.length; i++) {
             String string = data[i];
             datadouble[i] = new Double(string);
-//            BigDecimal bigd = new BigDecimal(datadouble[i]).setScale(precision, RoundingMode.HALF_UP);
-//            datadouble[i] = bigd.doubleValue();
         }
         Arrays.sort(datadouble);
         return datadouble;
+    }
+
+    public static final Integer[] toDataInt(String str, String separator) {
+        String[] data = str.split(separator);
+        Integer[] dataIntegers = new Integer[data.length];
+        for (int i = 0; i < data.length; i++) {
+            String string = data[i];
+            dataIntegers[i] = new Integer(string);
+        }
+        Arrays.sort(dataIntegers);
+        return dataIntegers;
     }
 
     public final Double[] calculateUniqueSet() {
@@ -70,28 +101,38 @@ public class TDF {
         int rows = getClasesCount();
         Float f = new Float(getAmplitud());
         Double[][] intervals = new Double[rows][];
-        double amplitud;
-        if (isRoundable()) {
-            amplitud = Math.round(f);
-        } else {
-//            amplitud = f;
-            BigDecimal bigd = new BigDecimal(f);
-            bigd.setScale(precision, RoundingMode.HALF_UP);
-            amplitud = bigd.doubleValue();
-        }
-
+        double amplitud = Math.round(f);
         double limI = getMin(), limS = limI + amplitud;
         double max = getMax();
         System.out.println(max);
         for (int i = 0; i < rows; i++) {
-//            limI = getNumber(limI);
-//            limS = getNumber(limS);
             intervals[i] = new Double[]{limI, limS};
-//            System.out.println(Arrays.toString(intervals[i]));
             limI = limS;
             limS += amplitud;
         }
         return intervals;
+    }
+
+    public static final Double[][] resolveClasses(Double[] classes, boolean unique) {
+        Double[][] setClass;
+        if (unique) {
+            // 1,3,5,7
+            setClass = new Double[classes.length - 1][];
+            setClass[0] = new Double[]{classes[0], classes[1]};
+            for (int i = 2; i < classes.length; i++) {
+                setClass[i - 1] = new Double[]{classes[i - 1], classes[i]};
+            }
+//            System.out.println("resol: "+Arrays.deepToString(setClass));
+            return setClass;
+        }
+        int len = classes.length / 2;
+        setClass = new Double[len][];
+        int j = 1;
+        for (int i = 0; i < len; i++) {
+            setClass[i] = new Double[]{classes[i], classes[j]};
+            j++;
+        }
+        return setClass;
     }
 
     public final Double[] calculateMarks() {
@@ -106,7 +147,6 @@ public class TDF {
     public double getMax() {
         return data[data.length - 1];
     }
-// 439
 
     public double getMin() {
         return data[0];
@@ -136,20 +176,7 @@ public class TDF {
         return marcasClase;
     }
 
-    public void setRoundable(boolean r) {
-        roundable = r;
-    }
-
-    public boolean isRoundable() {
-        return roundable;
-    }
-
-    public double getNumber(double num) {
-        BigDecimal bigd = new BigDecimal(num).setScale(precision, RoundingMode.HALF_UP);
-        return bigd.doubleValue();
-    }
-
-    public int count(double d) {
+    public static Integer count(double d, Double[] data) {
         int count = 0;
         for (double dou : data) {
             if (dou == d) {
@@ -162,7 +189,7 @@ public class TDF {
     public final Double[] calculatefri() {
         Double[] dou = new Double[frecuenciaAbsSimple.length];
         for (int i = 0; i < dou.length; i++) {
-            dou[i] = frecuenciaAbsSimple[i] / new Double(data.length);
+            dou[i] = frecuenciaAbsSimple[i] / new Double(n);
         }
         return dou;
     }
@@ -170,7 +197,7 @@ public class TDF {
     public final Double[] calculateFri() {
         Double[] dou = new Double[frecuenciaAbsAcumulada.length];
         for (int i = 0; i < dou.length; i++) {
-            dou[i] = frecuenciaAbsAcumulada[i] / new Double(data.length);
+            dou[i] = frecuenciaAbsAcumulada[i] / new Double(n);
         }
         return dou;
     }
@@ -203,18 +230,55 @@ public class TDF {
         return count;
     }
 
-    public Integer[] countAll() {
+    public static Integer[] countAll(Double[] data, Double[] uniqueSet) {
         Integer[] counts = new Integer[uniqueSet.length];
         for (int i = 0; i < uniqueSet.length; i++) {
             Double double1 = uniqueSet[i];
-            counts[i] = count(double1);
+            counts[i] = count(double1, data);
         }
         return counts;
     }
 
+    public static Integer sum(Integer[] fi) {
+        Integer sum = 0;
+        for (Integer num : fi) {
+            sum += num;
+        }
+        return sum;
+    }
+
     public void showSummary() {
-        System.out.println(Arrays.toString(uniqueSet));
-        System.out.println(Arrays.toString(countAll()));
+        System.out.println("Promedio: " + Estimable.getNumber(avg, presición));
+        System.out.println("Varianza: " + Estimable.getNumber(s2, presición));
+        System.out.println("Desviación Estándar: " + Estimable.getNumber(s, presición));
+        System.out.println("Asimetría de Fisher: " + Estimable.getNumber(caf, presición));
+        System.out.println("Apuntamiento de Curtosis: " + Estimable.getNumber(ac, presición));
+//        System.out.println(Arrays.toString(uniqueSet));
+//        System.out.println(Arrays.toString(countAll(data, uniqueSet)));
+    }
+
+    public void showSummaryFull() {
+        Estimable.FULL = true;
+        System.out.println("---------------------------------PROMEDIO (Media Aritmetica)---------------------------------");
+        avg = promedioTDF(marcasClase, frecuenciaAbsSimple, n);
+        System.out.println("Promedio: " + Estimable.getNumber(avg, presición));
+
+        System.out.println("---------------------------------VARIANZA---------------------------------");
+        s2 = varianzaTDF(marcasClase, frecuenciaAbsSimple, avg, n, presición);
+        System.out.println("Varianza: " + Estimable.getNumber(s2, presición));
+
+        System.out.println("---------------------------------DESVIACIÓN ESTÁNDAR---------------------------------");
+        s = desviasiónEstándar(s2);
+        System.out.println("Desviación Estándar: " + Estimable.getNumber(s, presición));
+
+        System.out.println("---------------------------------ASIMETRÍA DE FISHER---------------------------------");
+        caf = coeficienteDeFisher(marcasClase, avg, frecuenciaAbsSimple, n, presición);
+        System.out.println("Asimetría de Fisher: " + Estimable.getNumber(caf, presición));
+
+        System.out.println("---------------------------------APUNTAMIENTO DE CURTOSIS---------------------------------");
+        ac = apuntamientoDeCurtosis(marcasClase, avg, frecuenciaAbsSimple, n, presición);
+        System.out.println("Apuntamiento de Curtosis: " + Estimable.getNumber(ac, presición));
+        Estimable.FULL = false;
     }
 
     public void showSummary2() {
@@ -234,48 +298,78 @@ public class TDF {
     private String[] names;
 
     public void showTable(Object[][] columns, String[] names, int presición, boolean horizontal) {
-        String string = "", separador = "\t", lineEnd = "\n", 
+        String string = "", separador = "\t", lineEnd = "\n",
                 header = "";
-        
-        if(names[0].equals(this.names[0])) {
-            names[0]=names[0]+"\t";
-        }else if(!names[names.length-1].equals(this.names[0])){
-            for(int i = 0; i<names.length; i++){
-                if(names[i].equals(this.names[0])){
-                    names[i]= names[i]+"\t";
+
+        if (!horizontal) {
+            for (int i = 0; i < columns.length; i++) {
+                string += names[i] + separador;
+                Object[] row = getRow(i, columns, horizontal);
+                string += toString(row, separador, presición, lineEnd);
+            }
+        } else {
+            if (names[0].equals(this.names[0])) {
+                names[0] = names[0] + "\t";
+            } else if (!names[names.length - 1].equals(this.names[0])) {
+                for (int i = 0; i < names.length; i++) {
+                    if (names[i].equals(this.names[0])) {
+                        names[i] = names[i] + "\t";
+                    }
                 }
             }
-        }
-            
-
-        for (int i = 0; i < columns.length; i++) {
-            if (!horizontal) {
-                string += names[i] + separador;
+            for (int i = 0; i < frecuenciaAbsSimple.length; i++) {
+                Object[] row = getRow(i, columns, horizontal);
+                string += toString(row, separador, presición, lineEnd);
             }
-
-            Object[] row = getRow(i, columns, horizontal);
-            string += toString(row, separador, presición, lineEnd);
-        }
-        if (horizontal) {
             for (String name : names) {
                 header += name + separador;
             }
             header += lineEnd;
         }
-        System.out.println(header+string);
+        System.out.println(header + string);
     }
 
-    public void showTable(int presición, boolean horizontal, Integer... columns) {
+    public void showTable(int presición, boolean horizontal, Integer[] columns) {
         if (columns == null) {
-            columns = getRange(0, this.columns.length);
+            columns = getRange(0, horizontal ? this.columns.length : this.frecuenciaAbsSimple.length);
         } else if (columns.length == 0) {
-            columns = getRange(0, this.columns.length);
+            columns = getRange(0, horizontal ? this.columns.length : this.frecuenciaAbsSimple.length);
         }
         showTable(getSlicing(columns), getSlicing(columns, names), presición, horizontal);
     }
 
-    public void showTable(int presición, Integer... columns) {
+    public void showTable(int presición, boolean horizontal) {
+        showTable(presición, horizontal, null);
+    }
+
+    public void showTable(Integer[] columns) {
         showTable(presición, true, columns);
+    }
+
+    public void showTable() {
+        showTable(presición, true, null);
+    }
+
+    public void showTable(int presición) {
+        showTable(presición, true, null);
+    }
+
+    public void showTable(int presición, Integer[] columns) {
+        showTable(presición, true, columns);
+    }
+
+    public void show() {
+        showTable();
+        showSummary();
+    }
+
+    public void showAll() {
+        showTable();
+        showSummaryFull();
+    }
+
+    public static Integer[] cols(Integer... cols) {
+        return cols;
     }
 
     public void resolvePresición(Object[] row, int pres) {
@@ -296,8 +390,10 @@ public class TDF {
 
     public String toString(Object[] row, String separator, int presición, String... end) {
         String str = "";
+//            System.out.println("objs: "+Arrays.toString(row));
         for (Object obj : row) {
             if (obj instanceof Double) {
+//                System.out.println("oj: "+obj);
                 obj = new BigDecimal(new Double(obj + "")).setScale(presición, RoundingMode.HALF_UP);
             }
             str += obj + separator;
@@ -318,14 +414,23 @@ public class TDF {
     }
 
     public Object[] getRow(int row, Object[][] columns, boolean horizontal) {
+//        System.out.println("row: "+row);
+//        System.out.println("columns.length: "+columns.length);
         Object[] tuple = new Object[columns.length];
-        for (int i = 0; i < columns.length; i++) {
-            if (horizontal) {
+        if (horizontal) {
+//            System.out.println("---------------------- NEW ROW "+row);
+            for (int i = 0; i < columns.length; i++) {
                 tuple[i] = columns[i][row];
-            } else {
-                tuple[i] = columns[row][i];
+//                System.out.println("tuple[i]: "+tuple[i]);
             }
+        } else {
+            for (int i = 0; i < columns.length; i++) {
+                tuple[i] = columns[row][i];
+//                System.out.println("tuple[i]: "+tuple[i]);
+            }
+            System.arraycopy(columns[row], 0, tuple, 0, columns.length);
         }
+//        System.out.println(Arrays.toString(tuple));
         return tuple;
     }
 
@@ -340,7 +445,6 @@ public class TDF {
                 arr.add(i);
             }
         }
-        not(null);
         return arr.toArray(new Integer[arr.size()]);
     }
 
@@ -363,7 +467,7 @@ public class TDF {
         }
         return shot;
     }
-    
+
     public String[] getSlicing(Integer[] numColumns, String[] header) {
         int c = 0;
         String[] shot = new String[numColumns.length];
@@ -410,8 +514,11 @@ public class TDF {
 
     public String toStringMark() {
         String str = "";
+        String limI, limS;
         for (Double[] i : clases) {
-            str += "[" + i[0] + " - " + i[1] + ")\n";
+            limI = Estimable.getNumber(i[0], presición) + "";
+            limS = Estimable.getNumber(i[1], presición) + "";
+            str += "[" + limI + " - " + limS + ")\n";
         }
         return str;
     }
@@ -431,6 +538,36 @@ public class TDF {
 
     public String toStringR(Object[] str) {
         return toStringR(Arrays.deepToString(str));
+    }
+
+    private Double avg, s2, s, ac, caf;
+
+    public Double mediaArimetica() {
+        return avg;
+    }
+
+    public Double coeficienteDeAsimetriaDeFisher() {
+        return caf;
+    }
+
+    public Double coeficienteDeApuntamientoDeCurtosis() {
+        return ac;
+    }
+
+    public Double varianza() {
+        return s2;
+    }
+
+    public Double desviaciónEstándar() {
+        return s;
+    }
+
+    public final void calculateEstimable() {
+        avg = promedioTDF(marcasClase, frecuenciaAbsSimple, n);
+        s2 = varianzaTDF(marcasClase, frecuenciaAbsSimple, avg, n, presición);
+        s = desviasiónEstándar(s2);
+        caf = coeficienteDeFisher(marcasClase, avg, frecuenciaAbsSimple, n, presición);
+        ac = apuntamientoDeCurtosis(marcasClase, avg, frecuenciaAbsSimple, n, presición);
     }
 
 }
