@@ -36,11 +36,60 @@ public class TDF {
             return countForIntervals();
         });
     }
-
-    public TDF(Double[] ci, Integer[] fi, int precision) {
-        this(ci, fi, precision, false);
+    
+    public TDF(Double[] population, int presición){
+        init(presición, population.length, population, () -> {
+            return calculateClassesIntelvals();
+        }, () -> {
+            return countForIntervals();
+        });
     }
 
+//    /**
+//     * Utilice este constructor si no desea emplear intervalos de clase, se
+//     * omitirá el calculo de marca de clase (Mi)
+//     *
+//     * @param ci
+//     */
+//    public TDF(Double[] ci) {
+//        this.data = ci;
+//        init(2, data.length, data, () -> {
+//            return null;
+//        }, () -> {
+//            return ci;
+//        }, () -> {
+//            return countAll();
+//        }, "Ci, fi, fri, Fi, Fri", () -> {
+//            return new Object[][]{marcasClase, frecuenciaAbsSimple, frecuenciaRelSimple, frecuenciaAbsAcumulada, frecuenciaRelAcumulada};
+//        });
+//    }
+
+    /**
+     * Utilice este constructor si solo tienen los intervalos de clase y quiere
+     * ingresar valores repetidos. Por ejemplo: si tiene intervalos 3-6 y 6-8 al
+     * ingresar el vector tendría que ser un listado {3,6,6,8}. Adicional a esto
+     * debe pasar los valores de la frecuencia absoluta simple(fi)
+     *
+     * @param ci los valores de cada intervalo clase de una TDF
+     * @param fi los valores de la frecuencia absoluta simple
+     * @param presición el número de digitos que deja después del punto
+     */
+    public TDF(Double[] ci, Integer[] fi, int precisión) {
+        this(ci, fi, precisión, false);
+    }
+
+    /**
+     * Utilice este constructor si solo tienen los intervalos de clase y la
+     * frecuencia absoluta simple(fi)
+     *
+     * @param ci los valores de cada intervalo clase de una TDF (sin valores repetidos)
+     * @param fi los valores de la frecuencia absoluta simple
+     * @param presición el número de digitos que deja después del punto
+     * @param unique indica si los valores de las clases (ci) no están están
+     * repetidos, si es true resuelve los intervalos de clases como si fueran
+     * unicos, caso contrario agarra cada par como intervalo, de cualquier forma
+     * ci debería estar ordenado
+     */
     public TDF(Double[] ci, Integer[] fi, int presición, boolean unique) {
         init(presición, sum(fi), new Double[0], () -> {
             return resolveClasses(ci, unique);
@@ -50,18 +99,27 @@ public class TDF {
     }
 
     private void init(int presición, int n, Double[] data, Supplier<Double[][]> ci, Supplier<Integer[]> fi) {
+        init(presición, n, data, ci, () -> {
+            return calculateMarks();
+        }, fi, "Ci, Mi, fi, fri, Fi, Fri", () -> {
+            return new Object[][]{toStringMark().split("\n"), marcasClase, frecuenciaAbsSimple, frecuenciaRelSimple, frecuenciaAbsAcumulada, frecuenciaRelAcumulada};
+        });
+    }
+
+    private void init(int presición, int n, Double[] data, Supplier<Double[][]> ci, Supplier<Double[]> mi, Supplier<Integer[]> fi, String names, Supplier<Object[][]> cols) {
         this.presición = presición;
         this.data = data;
         this.n = n;
         this.clases = ci.get();
-        this.marcasClase = calculateMarks();
+        this.marcasClase = mi.get();
         this.uniqueSet = calculateUniqueSet();
         this.frecuenciaAbsSimple = fi.get();
         this.frecuenciaAbsAcumulada = calculateFi();
         this.frecuenciaRelSimple = calculatefri();
         this.frecuenciaRelAcumulada = calculateFri();
-        this.names = "Ci, Mi, fi, fri, Fi, Fri".replaceAll(" ", "").split(",");
-        this.columns = new Object[][]{toStringMark().split("\n"), marcasClase, frecuenciaAbsSimple, frecuenciaRelSimple, frecuenciaAbsAcumulada, frecuenciaRelAcumulada};
+        this.names = names.replaceAll(" ", "").split(",");
+        this.columns = cols.get();
+        System.out.println();
         calculateEstimable();
     }
 
@@ -103,8 +161,8 @@ public class TDF {
         Double[][] intervals = new Double[rows][];
         double amplitud = Math.round(f);
         double limI = getMin(), limS = limI + amplitud;
-        double max = getMax();
-        System.out.println(max);
+//        double max = getMax();
+//        System.out.println(max);
         for (int i = 0; i < rows; i++) {
             intervals[i] = new Double[]{limI, limS};
             limI = limS;
@@ -239,6 +297,10 @@ public class TDF {
         return counts;
     }
 
+    public Integer[] countAll() {
+        return countAll(data, uniqueSet);
+    }
+
     public static Integer sum(Integer[] fi) {
         Integer sum = 0;
         for (Integer num : fi) {
@@ -308,12 +370,14 @@ public class TDF {
                 string += toString(row, separador, presición, lineEnd);
             }
         } else {
-            if (names[0].equals(this.names[0])) {
-                names[0] = names[0] + "\t";
-            } else if (!names[names.length - 1].equals(this.names[0])) {
-                for (int i = 0; i < names.length; i++) {
-                    if (names[i].equals(this.names[0])) {
-                        names[i] = names[i] + "\t";
+            if (clases != null ? clases.length != 0 : false) {
+                if (names[0].equals(this.names[0])) {
+                    names[0] = names[0] + "\t";
+                } else if (!names[names.length - 1].equals(this.names[0])) {
+                    for (int i = 0; i < names.length; i++) {
+                        if (names[i].equals(this.names[0])) {
+                            names[i] = names[i] + "\t";
+                        }
                     }
                 }
             }
@@ -338,7 +402,12 @@ public class TDF {
         showTable(getSlicing(columns), getSlicing(columns, names), presición, horizontal);
     }
 
+    
     public void showTable(int presición, boolean horizontal) {
+        showTable(presición, horizontal, null);
+    }
+    
+    public void showTable(boolean horizontal) {
         showTable(presición, horizontal, null);
     }
 
@@ -370,6 +439,24 @@ public class TDF {
 
     public static Integer[] cols(Integer... cols) {
         return cols;
+    }
+
+    public static Double[] asDouble(Object... values) {
+        Double[] colsD = new Double[values.length];
+        for (int i = 0; i < values.length; i++) {
+            Object value = values[i];
+            colsD[i] = new Double(value + "");
+        }
+        return colsD;
+    }
+    
+    public static Integer[] asInt(Object... values) {
+        Integer[] colsD = new Integer[values.length];
+        for (int i = 0; i < values.length; i++) {
+            Object value = values[i];
+            colsD[i] = new Integer(value + "");
+        }
+        return colsD;
     }
 
     public void resolvePresición(Object[] row, int pres) {
@@ -428,7 +515,7 @@ public class TDF {
                 tuple[i] = columns[row][i];
 //                System.out.println("tuple[i]: "+tuple[i]);
             }
-            System.arraycopy(columns[row], 0, tuple, 0, columns.length);
+//            System.arraycopy(columns[row], 0, tuple, 0, columns.length);
         }
 //        System.out.println(Arrays.toString(tuple));
         return tuple;
