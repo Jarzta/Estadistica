@@ -16,8 +16,6 @@ import javax.swing.UIManager;
  */
 public class Estadistica_Helper extends javax.swing.JFrame {
 
-    Secuencia secu = new Secuencia();
-
     /**
      * Creates new form Estadistica_Helper
      */
@@ -132,6 +130,10 @@ public class Estadistica_Helper extends javax.swing.JFrame {
 
     private void jMenuItemTablaFActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jMenuItemTablaFActionPerformed
         // TODO add your handling code here:
+        jPanelPantalla.removeAll();
+        jPanelPantalla.add(tabla);
+        jPanelPantalla.repaint();
+        jPanelPantalla.validate();
     }//GEN-LAST:event_jMenuItemTablaFActionPerformed
 
     private void jMenuItemVersionActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jMenuItemVersionActionPerformed
@@ -190,5 +192,6 @@ public class Estadistica_Helper extends javax.swing.JFrame {
     private javax.swing.JMenuItem jMenuItemVersion;
     private javax.swing.JPanel jPanelPantalla;
     // End of variables declaration//GEN-END:variables
-
+    Secuencia secu = new Secuencia();
+    Tabla tabla = new Tabla();
 }
